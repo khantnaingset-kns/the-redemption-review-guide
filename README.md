@@ -45,7 +45,7 @@ The design prioritizes production judgment over unnecessary component count. The
 
 ![DataFlow](./assets/dataflow.png)
 
-## Platform Bootstrap and Availability Strategy
+# Platform Bootstrap and Availability Strategy
 
 The platform is designed so that critical bootstrap and control-plane-adjacent components are not dependent on the worker nodes they help provision or manage.
 
@@ -78,6 +78,37 @@ These alerts cover the main production failure scenarios:
 - Infrastructure health signals required for Day-2 operations
 
 This approach keeps the initial platform operationally safe while remaining practical for a small team. The system can bootstrap itself, scale workloads through Karpenter, maintain API availability across zones, and surface failure signals through GitOps-managed monitoring rules.
+
+# Security & Networking
+
+The platform applies defense in depth across the AWS network layer, Kubernetes networking layer, and encryption layer.
+
+At the AWS networking layer, the service is exposed through AWS WAF and an internet-facing Application Load Balancer. Public access is limited to the ALB/WAF entry point, while EKS workloads run in private subnets and the database layer runs in isolated subnets with no direct internet route.
+
+Cilium is used as the Kubernetes networking and policy layer. It provides Kubernetes NetworkPolicy enforcement and improves runtime network visibility through Hubble. This allows the platform to restrict pod-to-pod communication and reduce lateral movement inside the cluster. Cilium is configured to avoid scheduling on Fargate workloads, while EC2-based workloads run on Karpenter-managed NodePools.
+
+Encryption is applied across multiple layers:
+
+- EKS secrets encryption is enabled.
+- KMS is used for encrypted log storage where applicable.
+- VPC Flow Logs are written to an encrypted S3 bucket using SSE-KMS.
+- S3 buckets block public access and use lifecycle policies for retention management.
+- RDS is designed to enforce SSL connections and use secure password encryption.
+- Master database credentials are managed through AWS Secrets Manager.
+
+For application traffic, TLS is terminated at the ALB edge layer. After ALB termination, internal service communication can still use SSL/TLS between the ingress layer and backend services where required. This allows the platform to keep external certificate management centralized at the ALB while still supporting encrypted internal traffic for sensitive service paths.
+
+The networking model is intentionally segmented:
+
+```text
+Internet
+  -> AWS WAF
+  -> Public ALB
+  -> Private EKS workloads
+  -> Isolated RDS PostgreSQL
+```
+
+This keeps the public attack surface small, separates workload and database tiers, and gives the platform multiple security control points before traffic reaches the application.
 
 # ADR-001 The Multiple Repos Structure
 
@@ -403,6 +434,7 @@ Junior engineers own scoped implementation areas with clear review boundaries.
 | P0 | Implement a reliable log collection and aggregation flow to Loki | Junior Engineer 1 |
 | P0 | Expose internal operational tools such as Argo CD and Grafana through a private access path using Private ALB, VPN, TLS, and access controls | Senior Engineer |
 | P0 | Install and Setup Trivy for Containers Security | Junior Engineer 2 |
+| P0 | Setup Cert Manager for internal SSL | Junior Engineer 1 |
 | P1 | Integrate Argo CD with enterprise SSO and group-based RBAC | Senior Engineer |
 | P1 | Setup a dashboard for Log Drop and Throghput to Loki  | Junior Engineer 2 |
 | P1 | Integrate Grafana with enterprise SSO and role-based access control | Senior Engineer |
