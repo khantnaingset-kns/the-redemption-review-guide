@@ -63,7 +63,7 @@ No EC2 nodes
 
 By running Argo CD and Karpenter on Fargate, the platform keeps the deployment and scaling control planes independent from the EC2 worker nodes they manage. Application workloads and heavier platform workloads are then scheduled onto Karpenter-managed EC2 NodePools after capacity is available.
 
-For application high availability, the API workload uses topology spread constraints with maxSkew to distribute replicas across failure domains. This reduces the risk of multiple replicas being concentrated in a single Availability Zone or node. The default PodDisruptionBudget keeps at least two API replicas available during voluntary disruptions such as node drain, consolidation, or rolling updates.
+For application high availability, the API workload uses topology spread constraints with maxSkew to distribute replicas across failure domains. This reduces the risk of multiple replicas being concentrated in a single Availability Zone or node. The default PodDisruptionBudget keeps at least two API replicas available during voluntary disruptions such as node drain, consolidation, or rolling updates. For details HA config you can review in the code and ADR-003 section.
 
 The GitOps repository also includes Prometheus alert rules under:
 
