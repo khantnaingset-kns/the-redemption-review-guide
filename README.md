@@ -1,6 +1,6 @@
 # The Redemption Assessment
 
-his is the reviewer guide for The Redemption assessment. It includes links to the Terraform and Kubernetes repositories, ADRs (Architectural Decision Records), and Day-2 Operations Delegation Guides.
+This is the reviewer guide for The Redemption assessment. It includes links to the Terraform and Kubernetes repositories, ADRs (Architectural Decision Records), and Day-2 Operations Delegation Guides.
 
 # Introduction 
 
