@@ -425,7 +425,6 @@ Junior engineers own scoped implementation areas with clear review boundaries.
 
 ## Day-2 Backlog
 
-## Day-2 Backlog
 
 | Priority | Item | Owner |
 |---|---|---|
