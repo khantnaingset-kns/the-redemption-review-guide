@@ -33,7 +33,7 @@ The design prioritizes production judgment over unnecessary component count. The
 6. Review the [Terraform repository](https://github.com/khantnaingset-kns/the-redemption-terraform).
 7. Review the [Helm chart repository](https://github.com/khantnaingset-kns/the-redemption-helm-charts).
 8. Review the [GitOps production repository](https://github.com/khantnaingset-kns/the-redemption-gitops-prod).
-9. Review the ADR sections in this document: [ADR-001](#adr-001-the-multiple-repos-structure), [ADR-002](#adr-002-use-self-managed-argo-cd), and [ADR-003](#adr-003-the-eks-and-karpenter).
+9. Review the ADR sections in this document: [ADR-001](#adr-001-the-multiple-repos-structure), [ADR-002](#adr-002-use-self-managed-argo-cd), [ADR-003](#adr-003-the-eks-and-karpenter), and [ADR-004](#adr-004-use-irsa-over-eks-pod-identity-for-bootstrap-and-fargate-compatible-workloads).
 10. Review [Day-2 Operations and Team Delegation](#day-2-operations-and-team-delegation).
 
 
@@ -401,6 +401,59 @@ taints:
 ```
 
 Then the workload Helm chart should define matching tolerations.
+
+# ADR-004: Use IRSA Over EKS Pod Identity for Bootstrap and Fargate-Compatible Workloads
+
+## Status
+
+Accepted
+
+## Context
+
+The platform requires several Kubernetes components to access AWS services securely from inside the EKS cluster.
+
+Examples include:
+
+- Karpenter calling EC2, SQS, and pricing-related AWS APIs
+- EBS CSI Driver using AWS permissions for volume management
+- Loki writing logs to an S3 bucket
+- other platform controllers requiring scoped AWS permissions
+
+AWS provides two common options for assigning IAM permissions to Kubernetes workloads:
+
+- IAM Roles for Service Accounts (IRSA)
+- EKS Pod Identity
+
+EKS Pod Identity is simpler to operate for EC2-node workloads because it avoids per-cluster OIDC trust policy conditions and uses the EKS Pod Identity Agent. However, the Pod Identity Agent runs as a DaemonSet on Linux EC2 worker nodes, and AWS documents that EKS Pod Identity is not available for pods running on Fargate. :contentReference[oaicite:0]{index=0}
+
+This platform runs critical bootstrap components such as Argo CD, CoreDNS, and Karpenter on Fargate to avoid dependency on Karpenter-managed EC2 nodes during bootstrap.
+
+## Decision
+
+Use IRSA for platform components that require AWS permissions, especially components that may run on Fargate.
+
+This includes:
+
+- Karpenter controller
+- EBS CSI Driver
+- Loki
+- other AWS-integrated controllers where required
+
+## Rationale
+
+IRSA is selected because it works with the bootstrap model used in this platform.
+
+Key reasons:
+
+- supports service-account-scoped IAM permissions
+- works with Fargate-hosted workloads
+- is compatible with the Karpenter controller running before EC2 NodePools exist
+- provides least-privilege IAM boundaries per Kubernetes service account
+- avoids depending on the EKS Pod Identity Agent during bootstrap
+- keeps AWS access explicit through service account annotations and OIDC trust policies
+
+AWS describes IRSA as a way to associate an IAM role with a Kubernetes service account so pods using that service account can access AWS APIs with scoped IAM permissions. :contentReference[oaicite:1]{index=1}
+
 
 # Day-2 Operations and Team Delegation
 
