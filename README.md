@@ -27,12 +27,14 @@ The design prioritizes production judgment over unnecessary component count. The
 
 1. Review this [README introduction](#introduction).
 2. Open the [AWS and data-flow diagrams](#diagrams) under [`assets/`](./assets/).
-3. Review the [Terraform repository](https://github.com/khantnaingset-kns/the-redemption-terraform).
-4. Review the [Platform Bootstrap and Availability Strategy](#platform-bootstrap-and-availability-strategy).
-5. Review the [Helm chart repository](https://github.com/khantnaingset-kns/the-redemption-helm-charts).
-6. Review the [GitOps production repository](https://github.com/khantnaingset-kns/the-redemption-gitops-prod).
-7. Review the ADR sections in this document: [ADR-001](#adr-001-the-multiple-repos-structure), [ADR-002](#adr-002-use-self-managed-argo-cd), and [ADR-003](#adr-003-the-eks-and-karpenter).
-8. Review [Day-2 Operations and Team Delegation](#day-2-operations-and-team-delegation).
+3. Review the [Platform Bootstrap and Availability Strategy](#platform-bootstrap-and-availability-strategy).
+4. Review [Security & Networking](#security--networking).
+5. Review [Reliability & Observability](#reliability--observability).
+6. Review the [Terraform repository](https://github.com/khantnaingset-kns/the-redemption-terraform).
+7. Review the [Helm chart repository](https://github.com/khantnaingset-kns/the-redemption-helm-charts).
+8. Review the [GitOps production repository](https://github.com/khantnaingset-kns/the-redemption-gitops-prod).
+9. Review the ADR sections in this document: [ADR-001](#adr-001-the-multiple-repos-structure), [ADR-002](#adr-002-use-self-managed-argo-cd), and [ADR-003](#adr-003-the-eks-and-karpenter).
+10. Review [Day-2 Operations and Team Delegation](#day-2-operations-and-team-delegation).
 
 
 # Diagrams
@@ -109,6 +111,37 @@ Internet
 ```
 
 This keeps the public attack surface small, separates workload and database tiers, and gives the platform multiple security control points before traffic reaches the application.
+
+# Reliability & Observability
+
+The platform is designed to remain available during traffic spikes, Availability Zone issues, bad deployments, and cluster capacity changes.
+
+Reliability is handled through multiple layers:
+
+- Argo CD, Karpenter, and CoreDNS run on EKS Fargate where appropriate so the GitOps and autoscaling control planes are not dependent on Karpenter-managed EC2 worker nodes.
+- Application workloads run on Karpenter-managed EC2 NodePools across multiple Availability Zones.
+- The API workload uses topology spread constraints with `maxSkew` to avoid concentrating replicas in a single node or Availability Zone.
+- The default PodDisruptionBudget keeps at least two API replicas available during voluntary disruptions such as node drains, rolling updates, or Karpenter consolidation.
+- Readiness probes prevent traffic from being routed to unready pods.
+- Failed deployments can be rolled back by reverting the Git commit and allowing Argo CD to restore the previous desired state.
+
+Observability is managed through the GitOps repository. Prometheus alert rules are stored under:
+
+```text
+/infrastructure/prometheus-operator/alerts
+```
+
+The alerting scope covers:
+
+Availability Zone degradation or uneven pod distribution
+bad deployment symptoms such as high error rate, failed rollout, crash loops, and readiness failures
+baseline service metrics such as request rate, latency, error rate, saturation, pod availability, and HPA behavior
+Karpenter provisioning failures and pending pods
+infrastructure health signals required for Day-2 operations
+
+Loki is used for log aggregationa and aws cloudwatch for fargate logs while Grafana dashboards provide operational visibility into application health, Karpenter capacity, and platform-level signals.
+
+The recovery model is GitOps-first: production state is represented in Git, Argo CD continuously reconciles drift, and rollback is performed by reverting to a previous known-good commit.
 
 # ADR-001 The Multiple Repos Structure
 
